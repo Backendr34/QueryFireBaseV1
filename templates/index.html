@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enhanced Query Page</title>
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* Global styles */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #74ABE2, #5563DE);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    /* Container for the form */
+    .container {
+      background: #fff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      width: 100%;
+      max-width: 600px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    form label {
+      display: block;
+      margin-top: 15px;
+      font-weight: 500;
+      color: #555;
+    }
+    form input[type="text"],
+    form input[type="email"],
+    form textarea,
+    form input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    form textarea {
+      resize: vertical;
+    }
+    form button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 20px;
+      border: none;
+      background: #5563DE;
+      color: #fff;
+      font-size: 16px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    form button:hover {
+      background: #3e4bb8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Submit Your Query</h1>
+    <form id="queryForm">
+      <label for="name">Name:</label>
+      <input type="text" id="name" name="name" required>
+
+      <label for="email">Email (optional):</label>
+      <input type="email" id="email" name="email" placeholder="your@example.com">
+
+      <label for="query">Query:</label>
+      <textarea id="query" name="query" rows="4" required></textarea>
+
+      <label for="image">Upload Image (optional):</label>
+      <input type="file" id="image" name="image" accept="image/*">
+
+      <label for="voice">Upload Voice (optional):</label>
+      <input type="file" id="voice" name="voice" accept="audio/*">
+
+      <button type="submit">Submit Query</button>
+    </form>
+  </div>
+
+  <!-- Firebase v9+ Modular SDK -->
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+    import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
+
+    // Your web app's Firebase configuration (update with your own configuration)
+    const firebaseConfig = {
+      apiKey: "AIzaSyD-vP0RoImLbkb_Eob5-sP4wMDAWgg904g",
+      authDomain: "queryfirebasev1.firebaseapp.com",
+      projectId: "queryfirebasev1",
+      storageBucket: "queryfirebasev1.firebasestorage.app",
+      messagingSenderId: "408989743500",
+      appId: "1:408989743500:web:d20d3f1405214ade93bea9",
+      databaseURL: "https://queryfirebasev1-default-rtdb.firebaseio.com"  // Ensure this matches your Realtime Database URL
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+    const storage = getStorage(app);
+
+    // Function to upload a file to Firebase Storage and return its download URL
+    async function uploadFile(file, folder) {
+      const timestamp = Date.now();
+      const fileName = `${timestamp}_${file.name}`;
+      const fileRef = storageRef(storage, `${folder}/${fileName}`);
+      const uploadTask = uploadBytesResumable(fileRef, file);
+
+      return new Promise((resolve, reject) => {
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            // Optional: Monitor progress here
+          },
+          (error) => {
+            reject(error);
+          },
+          () => {
+            getDownloadURL(uploadTask.snapshot.ref)
+              .then((downloadURL) => resolve(downloadURL))
+              .catch(reject);
+          }
+        );
+      });
+    }
+
+    // Handle form submission
+    document.getElementById('queryForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); // Prevent default form submission
+
+      const name = document.getElementById('name').value;
+      const email = document.getElementById('email').value;
+      const queryText = document.getElementById('query').value;
+      const imageFile = document.getElementById('image').files[0];
+      const voiceFile = document.getElementById('voice').files[0];
+
+      // Prepare data object to be stored in the Realtime Database
+      let data = {
+        name: name,
+        email: email || null,
+        query: queryText,
+        timestamp: Date.now()
+      };
+
+      try {
+        // If an image file is provided, upload and add its URL to the data
+        if (imageFile) {
+          const imageURL = await uploadFile(imageFile, 'images');
+          data.imageURL = imageURL;
+        }
+
+        // If a voice file is provided, upload and add its URL to the data
+        if (voiceFile) {
+          const voiceURL = await uploadFile(voiceFile, 'voices');
+          data.voiceURL = voiceURL;
+        }
+
+        // Write the data to Firebase Realtime Database under a new node in 'queries'
+        const queriesRef = ref(database, 'queries');
+        const newQueryRef = push(queriesRef);
+        await set(newQueryRef, data);
+
+        alert('Your query has been submitted successfully.');
+        document.getElementById('queryForm').reset();
+      } catch (error) {
+        console.error('Error submitting query:', error);
+        alert('There was an error submitting your query. Please try again.');
+      }
+    });
+  </script>
+</body>
+</html>
